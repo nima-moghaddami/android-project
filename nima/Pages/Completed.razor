@@ -1,0 +1,67 @@
+﻿@page "/completed"
+@using nima.Data
+@inject TodoStorage Storage
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <h1>✅ کارهای انجام شده</h1>
+    <p>@completedTodos.Count کار</p>
+</div>
+
+@if (completedTodos.Count == 0)
+{
+    <div class="empty-state">
+        <span class="emoji">🎯</span>
+        <p>هنوز کاری انجام نداده‌اید</p>
+        <button class="btn btn-primary" @onclick="GoToAdd">+ افزودن کار جدید</button>
+    </div>
+}
+else
+{
+    <div class="todo-list">
+        @foreach (var todo in completedTodos.OrderByDescending(t => t.CompletedAt))
+        {
+            <div class="todo-card completed-card">
+                <div class="todo-header">
+                    <span class="todo-title completed">@todo.Title</span>
+                    <span class="todo-date">@(todo.CompletedAt?.ToString("dd MMM") ?? "نامشخص")</span>
+                </div>
+                <div class="todo-actions">
+                    <button class="btn-icon danger" @onclick="() => DeleteTodo(todo)">🗑️</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<TodoItem> allTodos = new();
+    private List<TodoItem> completedTodos => allTodos.Where(t => t.IsCompleted).ToList();
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        allTodos = Storage.LoadTodos();
+        StateHasChanged();
+    }
+
+    private void GoToAdd()
+    {
+        Nav.NavigateTo("/addtodo");
+    }
+
+    private async Task DeleteTodo(TodoItem todo)
+    {
+        bool confirm = await App.Current.MainPage.DisplayAlert("حذف", $"آیا «{todo.Title}» حذف شود؟", "بله", "خیر");
+        if (confirm)
+        {
+            allTodos.Remove(todo);
+            Storage.SaveTodos(allTodos);
+            LoadData();
+        }
+    }
+}

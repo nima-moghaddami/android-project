@@ -1,0 +1,230 @@
+﻿@page "/todos"
+@using nima.Data
+@using nima.Services
+@inject TodoStorage Storage
+@inject NavigationManager Nav
+@inject NotificationService Notifier
+
+<div class="page-header">
+    <h1>📋 کارهای من</h1>
+    <p>@uncompletedTodos.Count کار ناتمام</p>
+</div>
+
+<div class="export-buttons">
+    <button class="btn-export" @onclick="ExportData">📤 خروجی (پشتیبان‌گیری)</button>
+    <button class="btn-import" @onclick="ImportData">📥 ورودی (بازیابی)</button>
+</div>
+
+<div class="search-box">
+    <input type="text" class="form-control" placeholder="جستجو..." @bind="searchTerm" @bind:event="oninput" />
+</div>
+
+<!-- بخش فیلتر تاریخ -->
+<div class="filter-section">
+    <div class="filter-title">📅 فیلتر بر اساس تاریخ</div>
+    <div class="filter-buttons">
+        <button class="filter-btn @(filterType == "all" ? "active" : "")" @onclick='() => SetFilter("all")'>همه</button>
+        <button class="filter-btn @(filterType == "today" ? "active" : "")" @onclick='() => SetFilter("today")'>امروز</button>
+        <button class="filter-btn @(filterType == "week" ? "active" : "")" @onclick='() => SetFilter("week")'>این هفته</button>
+        <button class="filter-btn @(filterType == "month" ? "active" : "")" @onclick='() => SetFilter("month")'>این ماه</button>
+    </div>
+</div>
+
+<!-- بخش دسته‌بندی -->
+<div class="category-section">
+    <div class="category-title">🏷️ دسته‌بندی</div>
+    <div class="category-tabs">
+        <button class="category-tab @(selectedCategory == "all" ? "active" : "")" @onclick='() => SetCategory("all")'>همه</button>
+        <button class="category-tab @(selectedCategory == "work" ? "active" : "")" @onclick='() => SetCategory("work")'>💼 کار</button>
+        <button class="category-tab @(selectedCategory == "personal" ? "active" : "")" @onclick='() => SetCategory("personal")'>👤 شخصی</button>
+        <button class="category-tab @(selectedCategory == "shopping" ? "active" : "")" @onclick='() => SetCategory("shopping")'>🛒 خرید</button>
+        <button class="category-tab @(selectedCategory == "health" ? "active" : "")" @onclick='() => SetCategory("health")'>🏃 سلامتی</button>
+    </div>
+</div>
+
+@if (filteredTodos.Count == 0)
+{
+    <div class="empty-state">
+        <span class="emoji">🎉</span>
+        <p>هیچ کاری برای انجام نداری!</p>
+        <button class="btn btn-primary" @onclick="GoToAdd">+ افزودن کار جدید</button>
+    </div>
+}
+else
+{
+    <div class="todo-list">
+        @foreach (var todo in filteredTodos)
+        {
+            <div class="todo-card @GetPriorityClass(todo.Priority)">
+                <div class="todo-header">
+                    <input type="checkbox"
+                           checked="@todo.IsCompleted"
+                   @onchange="(e) => OnCheckboxChanged(todo, e)" />
+                    <div class="todo-content">
+                        <span class="todo-title @(todo.IsCompleted ? "completed" : "")">@todo.Title</span>
+                        <div class="todo-meta">
+                            <span class="todo-category-icon">@GetCategoryIcon(todo.Category)</span>
+                            <span class="todo-date-time">
+                                📅 @todo.DueDate.ToString("yyyy/MM/dd")
+                                🕐 @todo.DueTime.ToString(@"hh\:mm")
+                            </span>
+                            @if (todo.IsPinned)
+                            {
+                                <span class="pinned-badge">📌 پین شده</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="todo-actions">
+                    <button class="btn-icon pin-btn @(todo.IsPinned ? "pinned" : "")" @onclick="() => TogglePin(todo)">
+                        📌
+                    </button>
+                    <button class="btn-icon" @onclick="() => EditTodo(todo.Id)">✏️</button>
+                    <button class="btn-icon danger" @onclick="() => DeleteTodo(todo)">🗑️</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<TodoItem> allTodos = new();
+    private string searchTerm = "";
+    private string filterType = "all";
+    private string selectedCategory = "all";
+    [Inject] ExportService Exporter { get; set; }
+
+    private List<TodoItem> uncompletedTodos => allTodos.Where(t => !t.IsCompleted).ToList();
+    private List<TodoItem> filteredTodos => allTodos
+        .Where(t => !t.IsCompleted && (string.IsNullOrEmpty(searchTerm) || t.Title.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
+        .Where(t => ApplyDateFilter(t))
+        .Where(t => ApplyCategoryFilter(t))
+        .OrderByDescending(t => t.IsPinned)  
+        .ThenBy(t => t.DueDateTime)           
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadTodos();
+            await Notifier.CheckAndNotify(allTodos);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"خطا: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTodos()
+    {
+        allTodos = await Task.Run(() => Storage.LoadTodos());
+        StateHasChanged();
+    }
+
+    private bool ApplyDateFilter(TodoItem todo)
+    {
+        return filterType switch
+        {
+            "today" => todo.DueDate.Date == DateTime.Now.Date,
+            "week" => todo.DueDate.Date <= DateTime.Now.AddDays(7).Date && todo.DueDate.Date >= DateTime.Now.Date,
+            "month" => todo.DueDate.Month == DateTime.Now.Month && todo.DueDate.Year == DateTime.Now.Year,
+            _ => true
+        };
+    }
+
+    private bool ApplyCategoryFilter(TodoItem todo)
+    {
+        return selectedCategory == "all" || todo.Category == selectedCategory;
+    }
+
+    private void SetFilter(string filter)
+    {
+        filterType = filter;
+        StateHasChanged();
+    }
+
+    private void SetCategory(string category)
+    {
+        selectedCategory = category;
+        StateHasChanged();
+    }
+
+    private async Task OnCheckboxChanged(TodoItem todo, ChangeEventArgs e)
+    {
+        todo.IsCompleted = (bool)e.Value;
+        if (todo.IsCompleted)
+            todo.CompletedAt = DateTime.Now;
+        else
+            todo.CompletedAt = null;
+
+        await Task.Run(() => Storage.SaveTodos(allTodos));
+        await LoadTodos();
+    }
+
+    private async Task DeleteTodo(TodoItem todo)
+    {
+        bool confirm = await App.Current.MainPage.DisplayAlert("حذف", $"آیا «{todo.Title}» حذف شود؟", "بله", "خیر");
+        if (confirm)
+        {
+            allTodos.Remove(todo);
+            await Task.Run(() => Storage.SaveTodos(allTodos));
+            await LoadTodos();
+        }
+    }
+
+    private async Task TogglePin(TodoItem todo)  
+    {
+        todo.IsPinned = !todo.IsPinned;
+        await Task.Run(() => Storage.SaveTodos(allTodos));
+        await LoadTodos();
+    }
+
+    private void GoToAdd()
+    {
+        Nav.NavigateTo("/addtodo");
+    }
+
+    private void EditTodo(int id)
+    {
+        Nav.NavigateTo($"/edittodo/{id}");
+    }
+
+    private async Task ExportData()
+    {
+        await Exporter.ExportToJson(allTodos);
+    }
+
+    private async Task ImportData()
+    {
+        var imported = await Exporter.ImportFromJson();
+        if (imported != null && imported.Count > 0)
+        {
+            var maxId = allTodos.Count > 0 ? allTodos.Max(t => t.Id) : 0;
+            foreach (var item in imported)
+            {
+                item.Id = ++maxId;
+                allTodos.Add(item);
+            }
+            Storage.SaveTodos(allTodos);
+            await LoadTodos();
+            await App.Current.MainPage.DisplayAlert("موفق", $"{imported.Count} کار جدید اضافه شد!", "باشه");
+        }
+    }
+
+    private string GetPriorityClass(int priority) => priority switch
+    {
+        3 => "high-priority",
+        2 => "medium-priority",
+        _ => "low-priority"
+    };
+
+    private string GetCategoryIcon(string category) => category switch
+    {
+        "work" => "💼",
+        "personal" => "👤",
+        "shopping" => "🛒",
+        "health" => "🏃",
+        _ => "📌"
+    };
+}

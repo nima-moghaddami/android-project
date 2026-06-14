@@ -1,0 +1,94 @@
+﻿@page "/statistics"
+@using nima.Data
+@inject TodoStorage Storage
+
+<div class="page-header">
+    <h1>📊 آمار و عملکرد</h1>
+    <p>خلاصه وضعیت کارهای شما</p>
+</div>
+
+@if (allTodos.Count == 0)
+{
+    <div class="empty-state">
+        <span class="emoji">📭</span>
+        <p>هنوز هیچ کاری اضافه نکرده‌اید</p>
+        <a href="/addtodo" class="btn btn-primary">+ افزودن کار جدید</a>
+    </div>
+}
+else
+{
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">@allTodos.Count</div>
+            <div class="stat-label">کل کارها</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-value">@completedCount</div>
+            <div class="stat-label">انجام شده</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-value">@pendingCount</div>
+            <div class="stat-label">در انتظار</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="stat-value">@overdueCount</div>
+            <div class="stat-label">تاریخ گذشته</div>
+        </div>
+    </div>
+
+    <div class="progress-section">
+        <div class="progress-label">پیشرفت کلی</div>
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width: @progressPercent%;"></div>
+        </div>
+        <div class="progress-percent">@progressPercent%</div>
+    </div>
+
+    <div class="info-cards">
+        <div class="info-card">
+            <div class="info-icon">⭐</div>
+            <div class="info-content">
+                <div class="info-title">اولویت بالا</div>
+                <div class="info-value">@highPriorityCount کار</div>
+            </div>
+        </div>
+        <div class="info-card">
+            <div class="info-icon">📅</div>
+            <div class="info-content">
+                <div class="info-title">نزدیک‌ترین سررسید</div>
+                <div class="info-value">@nearestDueDate</div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TodoItem> allTodos = new();
+
+    private int completedCount => allTodos.Count(t => t.IsCompleted);
+    private int pendingCount => allTodos.Count(t => !t.IsCompleted);
+    private int overdueCount => allTodos.Count(t => !t.IsCompleted && t.DueDate.Date < DateTime.Now.Date);
+    private int highPriorityCount => allTodos.Count(t => t.Priority == 3 && !t.IsCompleted);
+    private int progressPercent => allTodos.Count == 0 ? 0 : (int)((double)completedCount / allTodos.Count * 100);
+    private string nearestDueDate
+    {
+        get
+        {
+            var nearest = allTodos.Where(t => !t.IsCompleted && t.DueDate.Date >= DateTime.Now.Date)
+                                  .OrderBy(t => t.DueDate)
+                                  .FirstOrDefault();
+            return nearest == null ? "ندارد" : nearest.DueDate.ToString("yyyy/MM/dd");
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        allTodos = Storage.LoadTodos();
+        StateHasChanged();
+    }
+}

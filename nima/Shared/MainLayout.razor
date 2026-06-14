@@ -1,0 +1,58 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+
+<div class="app-container" @ref="appContainer">
+    <div class="main-content">
+        @Body
+    </div>
+
+    <div class="bottom-nav">
+        <NavLink class="nav-item-bottom" href="todos" Match="NavLinkMatch.All">
+            <div class="nav-icon">📋</div>
+            <div class="nav-label">کارها</div>
+        </NavLink>
+        <NavLink class="nav-item-bottom" href="addtodo">
+            <div class="nav-icon">➕</div>
+            <div class="nav-label">جدید</div>
+        </NavLink>
+        <NavLink class="nav-item-bottom" href="completed">
+            <div class="nav-icon">✅</div>
+            <div class="nav-label">انجام شده</div>
+        </NavLink>
+        <NavLink class="nav-item-bottom" href="statistics">
+            <div class="nav-icon">📊</div>
+            <div class="nav-label">آمار</div>
+        </NavLink>
+    </div>
+</div>
+
+@code {
+    private ElementReference appContainer;
+    private bool isDarkMode = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isDarkMode = Preferences.Get("darkmode", false);
+        await ApplyTheme();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ApplyTheme();
+        }
+    }
+
+    private async Task ApplyTheme()
+    {
+        if (isDarkMode)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('dark-mode')");
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('dark-mode')");
+        }
+    }
+}
